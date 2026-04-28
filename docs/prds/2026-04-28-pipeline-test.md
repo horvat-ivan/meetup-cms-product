@@ -7,6 +7,7 @@ issues:
   product: 'https://github.com/horvat-ivan/meetup-cms-product/issues/2'
   design: 'https://github.com/horvat-ivan/meetup-cms-design/issues/2'
   app: 'https://github.com/horvat-ivan/meetup-cms-app/issues/2'
+progress: 0/3
 ---
 
 # Pipeline Test
