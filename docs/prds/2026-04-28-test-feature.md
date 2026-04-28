@@ -1,12 +1,12 @@
 ---
 feature: test-feature
-status: draft
-created: 2026-04-28
-dispatched: null
+status: dispatched
+created: '2026-04-28'
+dispatched: '2026-04-28'
 issues:
-  product: null
-  design: null
-  app: null
+  product: 'https://github.com/horvat-ivan/meetup-cms-product/issues/1'
+  design: 'https://github.com/horvat-ivan/meetup-cms-design/issues/1'
+  app: 'https://github.com/horvat-ivan/meetup-cms-app/issues/1'
 ---
 
 # Test Feature
