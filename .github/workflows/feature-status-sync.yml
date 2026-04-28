@@ -1,0 +1,45 @@
+name: Feature Status Sync
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # hourly
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: feature-status-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run sync
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+        run: node .github/workflow-scripts/run-sync.mjs
+
+      - name: Commit updated PRD files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/prds/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update PRD frontmatter after status sync"
+            git pull --rebase
+            git push
+          fi
