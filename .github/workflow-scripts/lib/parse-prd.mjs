@@ -21,15 +21,21 @@ export function parsePrd(content) {
     throw new Error('PRD frontmatter missing required field: feature');
   }
 
+  // gray-matter caches parsed results by content string and returns shallow
+  // copies — deep-clone data so callers can mutate frontmatter without
+  // poisoning the cache for subsequent calls with the same content.
+  // Apply stringifyDates first so Date objects become strings before
+  // JSON.stringify (which would otherwise produce full ISO timestamps).
   stringifyDates(parsed.data);
+  const data = JSON.parse(JSON.stringify(parsed.data));
 
   const titleMatch = parsed.content.match(/^#\s+(.+)$/m);
-  const title = titleMatch ? titleMatch[1].trim() : parsed.data.feature;
+  const title = titleMatch ? titleMatch[1].trim() : data.feature;
 
   return {
-    frontmatter: parsed.data,
+    frontmatter: data,
     body: parsed.content,
-    slug: parsed.data.feature,
+    slug: data.feature,
     title,
   };
 }
