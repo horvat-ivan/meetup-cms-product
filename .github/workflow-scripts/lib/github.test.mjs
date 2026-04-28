@@ -41,11 +41,41 @@ test('createIssue calls gh issue create with correct args', async () => {
   assert.match(exec.calls[0], /--label feature,role:design/);
 });
 
-test('addToProject calls gh project item-add', async () => {
-  const exec = mockExec({ 'project item-add': '' });
-  await addToProject(1, 'horvat-ivan', 'https://github.com/horvat-ivan/x/issues/1', { exec });
-  assert.match(exec.calls[0], /project item-add 1/);
-  assert.match(exec.calls[0], /--owner horvat-ivan/);
+test('addToProject uses GraphQL: lookup project, lookup issue, mutate', async () => {
+  // Three sequential gh api graphql calls.
+  let callIndex = 0;
+  const responses = [
+    JSON.stringify({ data: { user: { projectV2: { id: 'PROJ_NODE_ID' } } } }),
+    JSON.stringify({ data: { repository: { issue: { id: 'ISSUE_NODE_ID' } } } }),
+    JSON.stringify({ data: { addProjectV2ItemById: { item: { id: 'ITEM_NODE_ID' } } } }),
+  ];
+  const exec = async (cmd, args) => {
+    const stdout = responses[callIndex++];
+    return { stdout, stderr: '', code: 0 };
+  };
+  exec.calls = [];
+  const wrapped = async (cmd, args) => {
+    wrapped.calls.push([cmd, ...args].join(' '));
+    return exec(cmd, args);
+  };
+  wrapped.calls = [];
+  await addToProject(1, 'horvat-ivan', 'https://github.com/horvat-ivan/repo/issues/42', { exec: wrapped });
+  assert.equal(wrapped.calls.length, 3);
+  assert.match(wrapped.calls[0], /api graphql/);
+  assert.match(wrapped.calls[0], /projectV2\(number: 1\)/);
+  assert.match(wrapped.calls[1], /repository\(owner: "horvat-ivan", name: "repo"\)/);
+  assert.match(wrapped.calls[1], /issue\(number: 42\)/);
+  assert.match(wrapped.calls[2], /addProjectV2ItemById/);
+  assert.match(wrapped.calls[2], /projectId: "PROJ_NODE_ID"/);
+  assert.match(wrapped.calls[2], /contentId: "ISSUE_NODE_ID"/);
+});
+
+test('addToProject throws on bad issue URL', async () => {
+  const exec = async () => ({ stdout: '', stderr: '', code: 0 });
+  await assert.rejects(
+    () => addToProject(1, 'horvat-ivan', 'not-a-real-url', { exec }),
+    /bad issue URL/,
+  );
 });
 
 test('listIssuesByLabel parses JSON output', async () => {

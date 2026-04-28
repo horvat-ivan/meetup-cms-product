@@ -39,9 +39,42 @@ export async function createIssue(repo, { title, body, labels = [] }, opts = {})
   return stdout.trim();
 }
 
+// `gh project item-add` fails with "unknown owner type" when authenticated via
+// GH_TOKEN env var (as in GitHub Actions). The GraphQL API works reliably
+// in both interactive and token-auth contexts, so we use that instead.
 export async function addToProject(projectNumber, owner, issueUrl, opts = {}) {
+  const m = issueUrl.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/);
+  if (!m) throw new Error(`addToProject: bad issue URL ${issueUrl}`);
+  const [, repoOwner, repoName, issueNum] = m;
+
+  // 1. Project ID (user-level project)
+  const { stdout: projRaw } = await gh(
+    [
+      'api', 'graphql',
+      '-f', `query=query { user(login: "${owner}") { projectV2(number: ${projectNumber}) { id } } }`,
+    ],
+    opts,
+  );
+  const projectId = JSON.parse(projRaw)?.data?.user?.projectV2?.id;
+  if (!projectId) throw new Error(`addToProject: project not found (${owner}/${projectNumber})`);
+
+  // 2. Issue node ID
+  const { stdout: issueRaw } = await gh(
+    [
+      'api', 'graphql',
+      '-f', `query=query { repository(owner: "${repoOwner}", name: "${repoName}") { issue(number: ${issueNum}) { id } } }`,
+    ],
+    opts,
+  );
+  const contentId = JSON.parse(issueRaw)?.data?.repository?.issue?.id;
+  if (!contentId) throw new Error(`addToProject: issue not found (${issueUrl})`);
+
+  // 3. Add via mutation
   await gh(
-    ['project', 'item-add', String(projectNumber), '--owner', owner, '--url', issueUrl],
+    [
+      'api', 'graphql',
+      '-f', `query=mutation { addProjectV2ItemById(input: { projectId: "${projectId}", contentId: "${contentId}" }) { item { id } } }`,
+    ],
     opts,
   );
 }
