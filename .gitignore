@@ -4,3 +4,5 @@
 # Claude Code local state
 .claude/local/
 .claude/session/
+
+node_modules/
