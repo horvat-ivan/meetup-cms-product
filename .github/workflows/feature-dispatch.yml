@@ -1,0 +1,91 @@
+name: Feature Dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/prds/**/*.md'
+  workflow_dispatch:
+    inputs:
+      feature_file:
+        description: 'Path to PRD file (e.g. docs/prds/2026-04-28-article-scheduling.md)'
+        required: true
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'dispatch'
+        type: choice
+        options:
+          - dispatch
+          - retract
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: feature-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Detect changed PRD files
+        id: detect
+        run: |
+          if [ -n "${{ inputs.feature_file }}" ]; then
+            echo "added=${{ inputs.feature_file }}" >> "$GITHUB_OUTPUT"
+            echo "deleted=" >> "$GITHUB_OUTPUT"
+          else
+            ADDED=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'docs/prds/*.md' | grep -v TEMPLATE.md | tr '\n' ' ')
+            DELETED=$(git diff --name-only --diff-filter=D HEAD~1 HEAD -- 'docs/prds/*.md' | grep -v TEMPLATE.md | tr '\n' ' ')
+            echo "added=$ADDED" >> "$GITHUB_OUTPUT"
+            echo "deleted=$DELETED" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch new features
+        if: steps.detect.outputs.added != '' && inputs.action != 'retract'
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+        run: |
+          for FILE in ${{ steps.detect.outputs.added }}; do
+            FEATURE_PATH="$FILE" node .github/workflow-scripts/run-dispatch.mjs
+          done
+
+      - name: Retract deleted features
+        if: steps.detect.outputs.deleted != '' || inputs.action == 'retract'
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+        run: |
+          if [ -n "${{ steps.detect.outputs.deleted }}" ]; then
+            for FILE in ${{ steps.detect.outputs.deleted }}; do
+              FEATURE_PATH="$FILE" node .github/workflow-scripts/run-retract.mjs
+            done
+          fi
+          if [ "${{ inputs.action }}" = "retract" ] && [ -n "${{ inputs.feature_file }}" ]; then
+            FEATURE_PATH="${{ inputs.feature_file }}" node .github/workflow-scripts/run-retract.mjs
+          fi
+
+      - name: Commit updated PRD files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/prds/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update PRD frontmatter after dispatch"
+            git pull --rebase
+            git push
+          fi
