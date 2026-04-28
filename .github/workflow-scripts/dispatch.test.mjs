@@ -5,7 +5,11 @@ import { dispatchPrd, retractPrd } from './dispatch.mjs';
 function makeFakeGh() {
   const created = [];
   const projectAdds = [];
+  const labelEnsures = [];
   return {
+    ensureLabel: async (repo, name, opts) => {
+      labelEnsures.push({ repo, name, opts });
+    },
     createIssue: async (repo, opts) => {
       const num = created.length + 1;
       const url = `https://github.com/${repo}/issues/${num}`;
@@ -18,7 +22,7 @@ function makeFakeGh() {
     closeIssue: async (repo, number, reason) => {
       created.push({ closed: { repo, number, reason } });
     },
-    _state: { created, projectAdds },
+    _state: { created, projectAdds, labelEnsures },
   };
 }
 
@@ -85,6 +89,21 @@ test('dispatchPrd applies feature: + role:* + seed labels correctly', async () =
     assert.ok(ls.includes('feature'));
     assert.ok(ls.includes('feature:ping-test'));
   }
+});
+
+test('dispatchPrd ensures feature:<slug> label in all 3 repos before issue creation', async () => {
+  const gh = makeFakeGh();
+  const fs = { readFile: async () => PRD_CONTENT, writeFile: async () => {} };
+  await dispatchPrd('docs/prds/x.md', { gh, fs });
+  const ensured = gh._state.labelEnsures;
+  assert.equal(ensured.length, 3);
+  const repos = ensured.map((e) => e.repo).sort();
+  assert.deepEqual(repos, [
+    'horvat-ivan/meetup-cms-app',
+    'horvat-ivan/meetup-cms-design',
+    'horvat-ivan/meetup-cms-product',
+  ]);
+  for (const e of ensured) assert.equal(e.name, 'feature:ping-test');
 });
 
 test('retractPrd closes parent + design + app seeds with reason', async () => {

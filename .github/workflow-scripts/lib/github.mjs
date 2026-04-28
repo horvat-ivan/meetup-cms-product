@@ -19,6 +19,14 @@ function gh(args, { exec = defaultExec } = {}) {
   return exec('gh', args);
 }
 
+export async function ensureLabel(repo, name, { color = 'EDEDED', description = '' } = {}, opts = {}) {
+  // gh label create with --force creates if missing, updates if exists.
+  // Required because `gh issue create --label` rejects unknown labels.
+  const args = ['label', 'create', name, '--repo', repo, '--color', color, '--force'];
+  if (description) args.push('--description', description);
+  await gh(args, opts);
+}
+
 export async function createIssue(repo, { title, body, labels = [] }, opts = {}) {
   const args = [
     'issue', 'create',

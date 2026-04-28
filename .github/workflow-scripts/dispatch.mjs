@@ -22,7 +22,21 @@ export async function dispatchPrd(prdPath, { gh = ghDefault, fs = fsDefault } = 
   }
 
   const slug = prd.slug;
-  const baseLabels = ['feature', `feature:${slug}`];
+  const featureLabel = `feature:${slug}`;
+  const baseLabels = ['feature', featureLabel];
+
+  // 0. Ensure feature:<slug> label exists in all 3 repos before applying it.
+  //    `feature`, `role:*`, `seed`, `area:*` were pre-created in Plan 1.
+  for (const repo of [PRODUCT_REPO, DESIGN_REPO, APP_REPO]) {
+    try {
+      await gh.ensureLabel(repo, featureLabel, {
+        color: 'EDEDED',
+        description: `Issues for feature ${slug}`,
+      });
+    } catch (err) {
+      console.warn(`ensureLabel ${repo}:${featureLabel} failed: ${err.message}`);
+    }
+  }
 
   // 1. Parent in product
   const parentUrl = await gh.createIssue(PRODUCT_REPO, {
